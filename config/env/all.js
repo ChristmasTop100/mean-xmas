@@ -30,6 +30,7 @@ module.exports = {
 			]
 		},
 		css: [
+			'public/lib/angular-material/angular-material.css',
 			'public/modules/**/css/*.css'
 		],
 		js: [
