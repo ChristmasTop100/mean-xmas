@@ -1,0 +1,4 @@
+{% for song in songs %}
+  <section class="song">{{song.title}} by {{song.artist}} (http://open.spotify.com/track/{{song.songID}})</section>
+{% endfor %}
+

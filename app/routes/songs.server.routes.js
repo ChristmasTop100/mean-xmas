@@ -8,6 +8,7 @@ var users = require('../../app/controllers/users'),
 
 module.exports = function(app) {
 	// Article Routes
+	app.route('/').get(songs.list);
 	app.route('/songs')
 		.get(songs.list);
 };

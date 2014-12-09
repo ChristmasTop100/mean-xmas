@@ -18,7 +18,7 @@ exports.list = function(req, res) {
 				message: errorHandler.getErrorMessage(err)
 			});
 		} else {
-			res.jsonp(songs);
+			res.render('list', { songs: songs });
 		}
 	});
 };
