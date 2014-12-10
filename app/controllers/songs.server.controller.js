@@ -11,60 +11,91 @@ var mongoose = require('mongoose'),
 	spotifyApi = new SpotifyWebApi({
   		clientId : '',
   		clientSecret : ''
-	});
+	}),
+        lastImport = 0,
+        importedSongs = 0,
+        totalSongs = 0,
+        tokenValidTill = 0,
+        refreshSongs = false;
 
-spotifyApi.clientCredentialsGrant()
-  .then(function(data) {
-    console.log('The access token expires in ' + data.expires_in);
-    console.log('The access token is ' + data.access_token);
+var checkAuthentication = function() {
+  // If needed fetch a new token from spotify (valid for 1 hour).
+  if ((new Date().getTime() - 6000) > tokenValidTill) {
+    console.log('Requesting credentials');
+    spotifyApi.clientCredentialsGrant()
+      .then(function(data) {                                                                                                                          
+        tokenValidTill = new Date().getTime() + data.expires_in;
+        console.log('The access token expires on ' + tokenValidTill);
 
-    // Save the access token so that it's used in future calls
-    spotifyApi.setAccessToken(data.access_token);
-  }, function(err) {
-        console.log('Something went wrong when retrieving an access token', err);
-  });
+        // Save the access token so that it's used in future calls
+        spotifyApi.setAccessToken(data.access_token);
+        return true;
+      });
+  }
+  else {
+    console.log('token still valid');
+  }
+  return false;
+};
 
 /**
  * List of Songs
  */
 exports.list = function(req, res) {
-	Song.find().sort('title').exec(function(err, songs) {
-		if (err) {
-			return res.status(400).send({
-				message: errorHandler.getErrorMessage(err)
-			});
-		} else {
-			res.render('list', { songs: songs });
-		}
-	});
+  Song.find().sort('title').exec(function(err, songs) {
+    if (err) {
+      return res.status(400).send({
+        message: errorHandler.getErrorMessage(err)
+      });
+    } else {
+      res.render('list', { songs: songs });
+    }
+  });
 };
 
 /**
  * Import songs
  */
 exports.import = function(req, res) {
-  spotifyApi.getPlaylistTracks('yaron', '5qtmbJOrYFGiku9jrge4en', { 'offset': 0, 'limit': 100, fields: 'items.track' })
-  .then(function(data) {
-    for (var song in data.items) {
-      var title = data.items[song].track.name;
-      var artists = data.items[song].track.artists.map(
-        function(artist){
-          return artist.name;
-        }
-      ).join(', ');
-      var songID = data.items[song].track.id;
+  // If the token needs to be refreshed, we'll also refresh the songs.
+  if (checkAuthentication()) {
+    // Delete all songs that exist in the database.
+    Song.find().remove(function(err){
+      if (err) {
+        return res.status(400).send({
+          message: errorHandler.getErrorMessage(err)
+        });
+      }
+      else {
+        importedSongs = 0;
+      }
+    });
+  }
+
+  console.log(importedSongs + ' Songs imported, now importing the next 100');
+  // Fetch all songs from our playlist and import them in the database.
+  spotifyApi.getPlaylistTracks('yaron', '5qtmbJOrYFGiku9jrge4en', { 'offset': importedSongs, 'limit': 100, fields: 'items.track' })
+    .then(function(data) {
+      for (var song in data.items) {
+        var title = data.items[song].track.name;
+
+        // A song can have multiple artists, so we need to join the names together.
+        var artists = data.items[song].track.artists.map(
+          function(artist){
+            return artist.name;
+          }
+        ).join(', ');
+        var songID = data.items[song].track.id;
       
-      var songObject = new Song({ songID: songID, title: title, artist: artists});
-      songObject.save();
-    }
-    
-    return res.status(200).send({
-      message: 'Songs imported'
-    });
-  }, function(err) {
-    return res.status(500).send({
-      message: err
-    });
+        var songObject = new Song({ songID: songID, title: title, artist: artists});
+        songObject.save();
+      }
+      importedSongs += 100;
+      return res.status(200).send({
+        message: 'Songs imported'
+      }, function(err) {console.log(err);});
+    }, function(err){console.log(err);});
+  return res.status(200).send({
+    message: 'Working on it'
   });
 };
-
