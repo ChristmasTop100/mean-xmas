@@ -28,7 +28,10 @@ var SongSchema = new Schema({
                 trim: true,
                 required: 'SongID cannot be blank'
         },
-
+        score: {
+                type: Number,
+                default: 0
+        }
 });
 
 mongoose.model('Song', SongSchema);
