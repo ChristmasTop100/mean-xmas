@@ -12,23 +12,26 @@ var mongoose = require('mongoose'),
   		clientId : '',
   		clientSecret : ''
 	}),
-  importedSongs = 0;
+  importedSongs = 0,
+  tokenValidTill = 0,
+  Q = require('q');
 
-var UpdateToken = function() {
-  var deferred = Q.defer()
+var updateToken = function() {
+  var deferred = Q.defer(),
+    curTime = new Date().getTime() / 1000;
 
   // If needed fetch a new token from spotify (valid for 1 hour).
-  if ((new Date().getTime() - 6000) > tokenValidTill) {
+  if (curTime - 10 > tokenValidTill) {
     console.log('Requesting credentials');
     spotifyApi.clientCredentialsGrant()
       .then(function(data) {                                                                                                                          
-        tokenValidTill = new Date().getTime() + data.expires_in;
+        tokenValidTill = curTime + data.expires_in;
         console.log('The access token expires on ' + tokenValidTill);
 
         // Save the access token so that it's used in future calls
         spotifyApi.setAccessToken(data.access_token);
         deferred.resolve(true);
-      });
+      }, deferred.reject);
   }
   else {
     deferred.resolve(false);
@@ -56,7 +59,7 @@ exports.list = function(req, res) {
  */
 exports.import = function(req, res) {
   // If the token needs to be refreshed, we'll also refresh the songs.
-  UpdateToken()
+  updateToken()
     .then(function(tokenUpdated) {
       if (tokenUpdated) {
         // Delete all songs that exist in the database.
@@ -78,7 +81,7 @@ exports.import = function(req, res) {
       spotifyApi.getPlaylistTracks('yaron', '5qtmbJOrYFGiku9jrge4en', {
         'offset': importedSongs,
         'limit': 100,
-        fields: 'items.track'
+        'fields': 'items.track, total'
       })
         .then(function (data) {
           for (var song in data.items) {
@@ -98,20 +101,17 @@ exports.import = function(req, res) {
               artist: artists
             });
             songObject.save();
+            importedSongs++;
           }
-          importedSongs += 100;
+
           return res.status(200).send({
-            message: 'Songs imported'
-          }, function (err) {
-            console.log(err);
+            message: 'Imported ' + importedSongs + ' of the ' + data.total + ' songs.'
           });
         });
-      return res.status(200).send({
-        message: 'Working on it'
-      });
-    }, function (err) {
+    })
+    .then(null, function(err) {
       return res.status(500).send({
-        "message": err,
+        'message': err.message
       });
     });
 };
